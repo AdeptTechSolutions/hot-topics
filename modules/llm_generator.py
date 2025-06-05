@@ -84,12 +84,14 @@ class LLMGenerator:
             response = model.generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.7, max_output_tokens=2000
+                    temperature=0.3, max_output_tokens=2000
                 ),
             )
 
             if not response.candidates or not response.candidates[0].content.parts:
-                print(f"Gemini response blocked or empty. Finish reason: {response.candidates[0].finish_reason if response.candidates else 'No candidates'}")
+                print(
+                    f"Gemini response blocked or empty. Finish reason: {response.candidates[0].finish_reason if response.candidates else 'No candidates'}"
+                )
                 return self._fallback_keyword_generation(topic)
 
             try:
@@ -208,7 +210,7 @@ class LLMGenerator:
             response = model.generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.8, max_output_tokens=4000
+                    temperature=0.3, max_output_tokens=4000
                 ),
             )
 
