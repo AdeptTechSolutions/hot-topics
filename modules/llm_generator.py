@@ -88,7 +88,17 @@ class LLMGenerator:
                 ),
             )
 
-            keywords = self._parse_keyword_response(response.text)
+            if not response.candidates or not response.candidates[0].content.parts:
+                print(f"Gemini response blocked or empty. Finish reason: {response.candidates[0].finish_reason if response.candidates else 'No candidates'}")
+                return self._fallback_keyword_generation(topic)
+
+            try:
+                response_text = response.text
+            except ValueError as e:
+                print(f"Error accessing response text: {e}")
+                return self._fallback_keyword_generation(topic)
+
+            keywords = self._parse_keyword_response(response_text)
 
             if keywords:
                 return keywords
