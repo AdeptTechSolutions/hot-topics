@@ -117,13 +117,11 @@ class KeywordsCampaignsApp:
         progress_bar = st.progress(0, text="Initializing...")
 
         try:
-            progress_bar.progress(
-                20, text="🔍 Fetching related keywords from DataForSEO Labs..."
-            )
+            progress_bar.progress(20, text="🔍 Fetching related keywords...")
             api_response = self.dataforseo.get_related_keywords(topic)
             if not api_response:
                 st.error(
-                    "Failed to fetch keywords from DataForSEO Labs API. The API might be down or the request timed out."
+                    "Failed to fetch keywords. The API might be down or the request timed out."
                 )
                 progress_bar.empty()
                 return results
@@ -162,7 +160,7 @@ class KeywordsCampaignsApp:
 
     def render_main_settings(self) -> Dict[str, Any]:
         """Render campaign settings in main area"""
-        st.markdown("### 📋 Campaign Settings")
+        st.markdown("#### 📋 Inputs")
 
         col1, col2 = st.columns([1, 1])
 
@@ -175,7 +173,7 @@ class KeywordsCampaignsApp:
         with col2:
             st.markdown("**Don't know what to search for?**")
             st.markdown(
-                ":red[**Let the tool analyze current trending topics keywords for you!**]"
+                ":rainbow-background[**Let the tool analyze current trending topics keywords for you!**]"
             )
         return {"topic": topic}
 
@@ -309,6 +307,39 @@ class KeywordsCampaignsApp:
             df = pd.DataFrame(filtered_keywords)
             csv = df.to_csv(index=False).encode("utf-8")
 
+    def render_full_ad_preview(self, ad_copy: Dict) -> str:
+        """Generates a realistic HTML preview of a search ad."""
+        headlines = ad_copy.get("headlines", [])
+        descriptions = ad_copy.get("descriptions", [])
+        display_path = ad_copy.get("display_path", "")
+
+        h1 = headlines[0] if len(headlines) > 0 else "Your Awesome Product"
+        h2 = headlines[1] if len(headlines) > 1 else "Special Offer Inside"
+        h3 = headlines[2] if len(headlines) > 2 else "Shop Now"
+
+        full_description = (
+            " ".join(descriptions)
+            if descriptions
+            else "Get the best deals and top-rated service. Click here to learn more about our exclusive offers and find the perfect solution for your needs today."
+        )
+
+        full_ad_html = f"""
+        <div style="font-family: Arial, sans-serif; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin: 10px 0; max-width: 600px; background-color: #ffffff;">
+            <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: bold; font-size: 14px; color: #202124;">Ad</span>
+                <span style="font-size: 14px; color: #5f6368; margin: 0 4px;">·</span>
+                <span style="font-size: 14px; color: #202124;">www.yourwebsite.com{display_path}</span>
+            </div>
+            <h3 style="color: #1a0dab; font-size: 20px; font-weight: 400; margin: 0 0 4px 0; line-height: 1.3;">
+                {' | '.join([h for h in [h1, h2, h3] if h])}
+            </h3>
+            <p style="font-size: 14px; color: #4d5156; line-height: 1.57; margin: 0;">
+                {full_description}
+            </p>
+        </div>
+        """
+        return full_ad_html
+
     def render_campaigns_tab(self, campaigns: List[Dict]):
         """Render campaigns tab"""
         if not campaigns:
@@ -341,20 +372,55 @@ class KeywordsCampaignsApp:
                         )
 
                 with col2:
-                    if campaign.get("ad_copies"):
+                    ad_copies = campaign.get("ad_copies")
+                    if ad_copies and isinstance(ad_copies, list) and len(ad_copies) > 0:
                         st.markdown("**📢 Example Ad Copy**")
-                        ad_copy_html = f"""
-                        <div style="border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9;">
-                            <p style="font-size: 1.1em; color: #1a0dab; font-weight: bold; margin: 0;">{campaign['ad_copies'][0] if len(campaign['ad_copies']) > 0 else 'Example Headline 1'}</p>
-                            <p style="font-size: 1.1em; color: #1a0dab; font-weight: bold; margin: 0;">{campaign['ad_copies'][1] if len(campaign['ad_copies']) > 1 else 'Example Headline 2'}</p>
-                            <p style="color: #545454; margin-top: 5px;">{campaign['ad_copies'][2] if len(campaign['ad_copies']) > 2 else 'This is an example description of the ad, highlighting key benefits and a call to action.'}</p>
-                        </div>
-                        """
-                        st.markdown(ad_copy_html, unsafe_allow_html=True)
+                        ad_copy = ad_copies[0]
+
+                        if isinstance(ad_copy, dict) and "headlines" in ad_copy:
+                            with st.container(border=True):
+                                headlines = ad_copy.get("headlines", [])
+                                descriptions = ad_copy.get("descriptions", [])
+
+                                h1 = headlines[0] if headlines else "Example Headline 1"
+                                d1 = (
+                                    descriptions[0]
+                                    if descriptions
+                                    else "Example description..."
+                                )
+
+                                ad_preview_html = f"""
+                                <div style="padding: 5px 5px 0 5px;">
+                                    <p style="font-size: 1.1em; color: #1a0dab; font-weight: bold; margin: 0;">{h1}</p>
+                                    <p style="color: #545454; margin-top: 5px; margin-bottom: 5px;">{d1}</p>
+                                </div>
+                                """
+                                st.markdown(ad_preview_html, unsafe_allow_html=True)
+
+                                popover = st.popover(
+                                    "View Details",
+                                    use_container_width=True,
+                                )
+
+                                with popover:
+                                    st.markdown("##### :blue-background[Ad Preview]")
+                                    full_ad_html = self.render_full_ad_preview(ad_copy)
+                                    st.markdown(full_ad_html, unsafe_allow_html=True)
+
+                                    st.markdown("##### :blue-background[Components]")
+                                    st.markdown("**Headlines:**")
+                                    for h in headlines:
+                                        st.info(h)
+
+                                    st.markdown("**Descriptions:**")
+                                    for d in descriptions:
+                                        st.info(d)
+                        else:
+                            st.info("No ad copy generated for this campaign.")
 
     def render_analysis_tab(self, analysis: Dict, keywords: List[Dict]):
         """Render analysis tab with charts and insights"""
-        st.markdown("## `>>> Overview`")
+        st.markdown("### :green-background[Overview]")
 
         if not keywords or not analysis:
             st.warning("No data available for analysis.")
@@ -382,7 +448,7 @@ class KeywordsCampaignsApp:
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown("### :blue[`> Competition Distribution`]")
+            st.markdown("#### :rainbow-background[Competition Distribution]")
             if analysis.get("competition_counts"):
                 comp_df = pd.DataFrame(
                     list(analysis["competition_counts"].items()),
@@ -404,7 +470,7 @@ class KeywordsCampaignsApp:
                 st.plotly_chart(fig, use_container_width=True)
 
         with col2:
-            st.markdown("### :red[`> Search Volume vs. CPC`]")
+            st.markdown("#### :rainbow-background[Search Volume vs. CPC]")
             if keywords:
                 kw_df = pd.DataFrame(keywords)
                 if "search_volume" in kw_df.columns and "cpc" in kw_df.columns:
@@ -430,7 +496,7 @@ class KeywordsCampaignsApp:
                     st.plotly_chart(fig, use_container_width=True)
 
         if keywords:
-            st.markdown("### :green[`> Top Keywords by Search Volume`]")
+            st.markdown("#### :rainbow-background[Top Keywords by Search Volume]")
             kw_df = pd.DataFrame(keywords)
             if "search_volume" in kw_df.columns:
                 top_keywords = kw_df.nlargest(15, "search_volume").sort_values(
@@ -455,7 +521,7 @@ class KeywordsCampaignsApp:
         if not results or not results.get("keywords"):
             return
 
-        st.markdown(f"## 📊 Results for '{results['topic']}'")
+        st.markdown(f"#### 📊 Results for '{results['topic']}'")
 
         tab1, tab2, tab3 = st.tabs(["🔑 Keywords", "🚀 Campaign Ideas", "📈 Analysis"])
 
@@ -470,10 +536,12 @@ class KeywordsCampaignsApp:
 
     def run(self):
         """Main application runner"""
-        st.markdown(
-            '<div class="main-header">🔍 Keywords & Campaigns</div>',
-            unsafe_allow_html=True,
-        )
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image(
+                "resources/logo.png",
+                use_container_width=True,
+            )
         self.render_sidebar()
         inputs = self.render_main_settings()
 

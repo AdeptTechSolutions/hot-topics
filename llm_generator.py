@@ -20,8 +20,9 @@ Brainstorm and create 2-3 distinct, hypothetical starter campaign strategies for
 3. A list of 5-8 *example* keywords you would expect to be relevant for this campaign.
 4. A clear description of the strategy.
 5. General expectations for performance.
-6. Example ad copy (headlines and descriptions).
+6. One detailed example ad copy, including multiple headlines and descriptions, structured as a JSON object.
 7. General targeting suggestions.
+8. **Crucially, ensure the entire output is a single, valid JSON array. All string values within the JSON must be properly escaped, especially for multi-line content like descriptions.**
 
 **Output Format:**
 Return your response as a single, valid JSON array of campaign objects. Do NOT include any text or markdown outside of the JSON array.
@@ -33,7 +34,20 @@ The JSON structure for each campaign object must be:
     "keywords": ["string", "string", ...],
     "description": "string",
     "expected_performance": "string",
-    "ad_copies": ["string", "string", "string"],
+    "ad_copies": [
+        {{
+            "headlines": [
+                "string (Headline 1, max 30 chars)",
+                "string (Headline 2, max 30 chars)",
+                "string (Headline 3, max 30 chars)"
+            ],
+            "descriptions": [
+                "string (Description 1, max 90 chars)",
+                "string (Description 2, max 90 chars)"
+            ],
+            "display_path": "string (e.g., /Best-Deals)"
+        }}
+    ],
     "targeting_suggestions": "string"
 }}
 """
@@ -93,6 +107,8 @@ class LLMGenerator:
         1. Analyze the keyword data, paying close attention to search volume, CPC, competition, and keyword intent.
         2. Create 3-4 distinct campaign strategies based on patterns you identify (e.g., high-volume informational keywords, low-competition commercial keywords).
         3. For each campaign, provide all the requested details in the specified JSON structure.
+        4. For the `ad_copies`, create one complete, detailed ad copy structured as a JSON object. It should follow modern digital advertising standards.
+        5. **Crucially, ensure the entire output is a single, valid JSON array. All string values within the JSON must be properly escaped, especially for multi-line content like descriptions.**
 
         **Output Format:**
         Return your response as a single, valid JSON array of campaign objects. Do NOT include any explanatory text, markdown formatting (like ```json), or anything outside of the JSON array itself.
@@ -104,7 +120,20 @@ class LLMGenerator:
             "keywords": ["string", "string", ...],
             "description": "string (A detailed description of the campaign strategy and rationale)",
             "expected_performance": "string (Performance expectations based on the data, e.g., 'High click volume with moderate CPC')",
-            "ad_copies": ["string (Headline 1)", "string (Headline 2)", "string (Description 1)"],
+            "ad_copies": [
+                {{
+                    "headlines": [
+                        "string (Headline 1, max 30 chars)",
+                        "string (Headline 2, max 30 chars)",
+                        "string (Headline 3, max 30 chars)"
+                    ],
+                    "descriptions": [
+                        "string (Description 1, max 90 chars)",
+                        "string (Description 2, max 90 chars)"
+                    ],
+                    "display_path": "string (e.g., /Tyre-Deals)"
+                }}
+            ],
             "targeting_suggestions": "string (Recommendations for targeting, bidding, and budget)"
         }}
         """
@@ -114,7 +143,7 @@ class LLMGenerator:
             prompt,
             generation_config=genai.types.GenerationConfig(
                 response_mime_type="application/json",
-                temperature=0.7,
+                temperature=0.2,
                 max_output_tokens=4096,
             ),
         )
@@ -156,30 +185,41 @@ class LLMGenerator:
         return "\n".join(context_lines)
 
     def _parse_campaign_response(self, response_text: str) -> List[Dict[str, Any]]:
-        """Parse campaign response from Gemini, expecting a JSON string."""
-        try:
+        """
+        Parse campaign response from Gemini, cleaning and correcting common LLM-induced JSON errors.
+        """
+        text = response_text.strip()
 
-            data = json.loads(response_text)
+        if text.startswith("```json"):
+            text = text[7:].strip()
+        elif text.startswith("```"):
+            text = text[3:].strip()
+
+        if text.endswith("```"):
+            text = text[:-3].strip()
+
+        try:
+            data = json.loads(text)
             if isinstance(data, list):
                 return data
             return []
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(
+                f"Initial JSON parsing failed: {e}. Attempting to slice and re-parse..."
+            )
+            start = text.find("[")
+            end = text.rfind("]")
 
-            try:
-                text = response_text.strip()
+            if start != -1 and end != -1:
+                json_str = text[start : end + 1]
+                try:
+                    data = json.loads(json_str)
+                    if isinstance(data, list):
+                        print("✅ Fallback JSON parsing successful after slicing.")
+                        return data
+                except json.JSONDecodeEror as final_e:
+                    print(f"Fallback JSON parsing failed even after slicing: {final_e}")
+                    print(f">>> Offending Text\n{response_text}")
+                    return []
 
-                if text.startswith("```json"):
-                    text = text[7:].strip()
-                elif text.startswith("```"):
-                    text = text[3:].strip()
-
-                if text.endswith("```"):
-                    text = text[:-3].strip()
-
-                campaigns = json.loads(text)
-                if isinstance(campaigns, list):
-                    return campaigns
-                return []
-            except Exception as parse_error:
-                print(f"Fallback JSON parsing failed: {parse_error}")
-                return []
+            return []
