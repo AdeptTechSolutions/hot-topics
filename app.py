@@ -278,7 +278,7 @@ class KeywordsCampaignsApp:
                     competition_level = keyword.get("competition_level", "UNKNOWN")
                     comp_class = self.get_competition_class(competition_level)
                     st.markdown(
-                        f'**Competition:** <span class="competition-label {comp_class}">{competition_level}</span>',
+                        f'**Competition** <span class="competition-label {comp_class}">{competition_level}</span>',
                         unsafe_allow_html=True,
                     )
                 with col5:
@@ -334,7 +334,7 @@ class KeywordsCampaignsApp:
                 col1, col2 = st.columns(2)
                 with col1:
                     if campaign.get("keywords"):
-                        st.markdown("**🔑 Target Keywords:**")
+                        st.markdown("**🔑 Target Keywords**")
                         st.dataframe(
                             pd.DataFrame(campaign["keywords"], columns=["Keyword"]),
                             use_container_width=True,
