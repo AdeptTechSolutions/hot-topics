@@ -10,6 +10,7 @@ import streamlit as st
 from config import Config
 from dataforseo_labs import DataForSEOLabs
 from llm_generator import LLMGenerator
+from trends import TrendsAnalyzer
 
 st.set_page_config(
     page_title="Keywords & Campaigns",
@@ -92,6 +93,7 @@ class KeywordsCampaignsApp:
         else:
             self.dataforseo = None
         self.llm_generator = LLMGenerator(self.config)
+        self.trends_analyzer = TrendsAnalyzer(self.config)
 
     def validate_api_keys(self) -> Dict[str, bool]:
         """Validate that required API keys are present"""
@@ -167,6 +169,7 @@ class KeywordsCampaignsApp:
         with col1:
             topic = st.text_input(
                 "**Enter a Topic**",
+                value=st.session_state.get("topic", ""),
                 placeholder="e.g., tyre dealers, insurance providers, digital marketing",
                 help="Enter the main topic to research. The tool will find related keywords and generate campaign ideas.",
             )
@@ -184,7 +187,7 @@ class KeywordsCampaignsApp:
 
         if missing_keys:
             st.sidebar.warning(f"⚠️ Missing API keys: {', '.join(missing_keys)}")
-            st.sidebar.info("💡 Configure API keys in config.py")
+            st.sidebar.info("💡 Configure API keys in a .env file.")
         else:
             st.sidebar.success("✔️ All API keys are configured!")
 
@@ -198,6 +201,8 @@ class KeywordsCampaignsApp:
             🚀 Generates AI-powered campaign ideas
 
             📈 Provides detailed keyword analysis
+            
+            🔥 Suggests campaign topics from Google Trends
             """
         )
 
@@ -547,6 +552,8 @@ class KeywordsCampaignsApp:
 
         if inputs["topic"]:
             st.session_state["topic"] = inputs["topic"]
+        elif "topic" in st.session_state and not inputs["topic"]:
+            del st.session_state["topic"]
 
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -556,7 +563,6 @@ class KeywordsCampaignsApp:
                 use_container_width=True,
             ):
                 if "topic" in st.session_state and st.session_state["topic"]:
-
                     if "results" in st.session_state:
                         del st.session_state["results"]
 
@@ -564,7 +570,6 @@ class KeywordsCampaignsApp:
 
                     if results and results.get("keywords"):
                         st.session_state["results"] = results
-                        st.rerun()
                     else:
                         st.error(
                             "Analysis could not be completed. Please check the topic and try again."
@@ -573,17 +578,54 @@ class KeywordsCampaignsApp:
                     st.warning("👆 Please enter a topic above to get started.")
 
         with col2:
+            search_api_available = bool(self.config.SEARCHAPI_KEY)
             if st.button(
                 "📈 Search Trends",
                 use_container_width=True,
+                disabled=not search_api_available,
             ):
-                st.warning("⚠️ Search Trends feature is not implemented yet")
+                if "results" in st.session_state:
+                    del st.session_state["results"]
 
-        if "results" in st.session_state and st.session_state["results"]:
-            self.render_results(st.session_state["results"])
+                with st.spinner("Analyzing Google Trends to find a hot topic..."):
+                    suggested_topic = asyncio.run(
+                        self.trends_analyzer.get_most_promising_topic()
+                    )
+
+                if suggested_topic:
+                    st.session_state["topic"] = suggested_topic
+                    st.session_state["auto_run_analysis"] = True
+                    st.success(
+                        f"🔥 Suggested topic: **{suggested_topic}**. Starting analysis..."
+                    )
+                    st.rerun()
+                else:
+                    st.error(
+                        "Could not fetch or analyze trending topics. Please try again later."
+                    )
+
+        if st.session_state.get("auto_run_analysis") and st.session_state.get("topic"):
+            st.session_state.pop("auto_run_analysis", None)
+            if "results" in st.session_state:
+                del st.session_state["results"]
+
+            results = asyncio.run(self.process_topic(st.session_state["topic"]))
+
+            if results and results.get("keywords"):
+                st.session_state["results"] = results
+            else:
+                st.error(
+                    "Analysis could not be completed. Please check the topic and try again."
+                )
+
+        if "results" in st.session_state:
+            if st.session_state.get("topic") == st.session_state["results"].get(
+                "topic"
+            ):
+                self.render_results(st.session_state["results"])
         elif "topic" not in st.session_state or not st.session_state["topic"]:
             st.info(
-                "👆 Please enter a topic above and click the button to get started."
+                "👆 Please enter a topic above and click 'Analyze', or click 'Search Trends' for an AI-suggested topic."
             )
 
 

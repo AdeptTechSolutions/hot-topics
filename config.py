@@ -18,6 +18,7 @@ class Config:
 
     DATAFORSEO_LOGIN = os.getenv("DATAFORSEO_LOGIN")
     DATAFORSEO_PASSWORD = os.getenv("DATAFORSEO_PASSWORD")
+    SEARCHAPI_KEY = os.getenv("SEARCHAPI_KEY")
 
     RATE_LIMITS = {
         "dataforseo": int(os.getenv("RATE_LIMIT_DATAFORSEO", 60)),
@@ -135,6 +136,7 @@ class Config:
         return {
             "Gemini API": bool(cls.GEMINI_API_KEY),
             "DataForSEO Labs": bool(cls.DATAFORSEO_LOGIN and cls.DATAFORSEO_PASSWORD),
+            "SearchAPI": bool(cls.SEARCHAPI_KEY),
         }
 
     @classmethod

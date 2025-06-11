@@ -217,7 +217,7 @@ class LLMGenerator:
                     if isinstance(data, list):
                         print("✅ Fallback JSON parsing successful after slicing.")
                         return data
-                except json.JSONDecodeEror as final_e:
+                except json.JSONDecodeError as final_e:
                     print(f"Fallback JSON parsing failed even after slicing: {final_e}")
                     print(f">>> Offending Text\n{response_text}")
                     return []
