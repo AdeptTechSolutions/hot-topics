@@ -403,11 +403,11 @@ class KeywordsCampaignsApp:
                                 )
 
                                 with popover:
-                                    st.markdown("##### :blue-background[Ad Preview]")
+                                    st.markdown("##### :rainbow-background[Ad Preview]")
                                     full_ad_html = self.render_full_ad_preview(ad_copy)
                                     st.markdown(full_ad_html, unsafe_allow_html=True)
 
-                                    st.markdown("##### :blue-background[Components]")
+                                    st.markdown("##### :rainbow-background[Components]")
                                     st.markdown("**Headlines:**")
                                     for h in headlines:
                                         st.info(h)
