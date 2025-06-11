@@ -319,16 +319,16 @@ class KeywordsCampaignsApp:
 
         for i, campaign in enumerate(campaigns):
             with st.expander(
-                f"**Campaign Idea {i+1}: {campaign.get('title', 'Untitled')}**",
+                f"**[Campaign Idea {i+1}] {campaign.get('title', 'Untitled')}**",
                 expanded=i == 0,
             ):
-                st.markdown(f"**🎯 Objective:** {campaign.get('objective', 'N/A')}")
-                st.markdown(f"**📝 Strategy:** {campaign.get('description', 'N/A')}")
+                st.markdown(f"**🎯 Objective** {campaign.get('objective', 'N/A')}")
+                st.markdown(f"**📝 Strategy** {campaign.get('description', 'N/A')}")
                 st.markdown(
-                    f"**💡 Targeting & Bidding:** {campaign.get('targeting_suggestions', 'N/A')}"
+                    f"**💡 Targeting & Bidding** {campaign.get('targeting_suggestions', 'N/A')}"
                 )
                 st.markdown(
-                    f"**📈 Expected Performance:** *{campaign.get('expected_performance', 'N/A')}*"
+                    f"**📈 Expected Performance** *{campaign.get('expected_performance', 'N/A')}*"
                 )
 
                 col1, col2 = st.columns(2)
@@ -342,7 +342,7 @@ class KeywordsCampaignsApp:
 
                 with col2:
                     if campaign.get("ad_copies"):
-                        st.markdown("**📢 Example Ad Copy:**")
+                        st.markdown("**📢 Example Ad Copy**")
                         ad_copy_html = f"""
                         <div style="border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9;">
                             <p style="font-size: 1.1em; color: #1a0dab; font-weight: bold; margin: 0;">{campaign['ad_copies'][0] if len(campaign['ad_copies']) > 0 else 'Example Headline 1'}</p>
