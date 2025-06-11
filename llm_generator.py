@@ -8,6 +8,36 @@ import google.generativeai as genai
 
 from config import Config
 
+PROMPT = """
+You are an expert PPC campaign strategist. A user has provided the topic "{topic}", but no specific keyword data is available.
+
+**Your Task:**
+Brainstorm and create 2-3 distinct, hypothetical starter campaign strategies for this topic. Since there's no data, base your strategies on common sense, industry knowledge, and likely user intents (e.g., informational, commercial, local).
+
+**For each campaign, provide:**
+1. A compelling title.
+2. A primary objective.
+3. A list of 5-8 *example* keywords you would expect to be relevant for this campaign.
+4. A clear description of the strategy.
+5. General expectations for performance.
+6. Example ad copy (headlines and descriptions).
+7. General targeting suggestions.
+
+**Output Format:**
+Return your response as a single, valid JSON array of campaign objects. Do NOT include any text or markdown outside of the JSON array.
+
+The JSON structure for each campaign object must be:
+{{
+    "title": "string",
+    "objective": "string",
+    "keywords": ["string", "string", ...],
+    "description": "string",
+    "expected_performance": "string",
+    "ad_copies": ["string", "string", "string"],
+    "targeting_suggestions": "string"
+}}
+"""
+
 
 class LLMGenerator:
     """AI-powered campaign generator using Gemini for DataForSEO keyword data"""
@@ -43,130 +73,71 @@ class LLMGenerator:
     ) -> List[Dict[str, Any]]:
         """Generate campaign ideas based on DataForSEO keyword data"""
         if not self.is_available():
-            return self._fallback_campaign_generation_from_keywords(
-                keywords_data, topic
-            )
+            return []
 
-        try:
-            await self._wait_for_rate_limit()
+        await self._wait_for_rate_limit()
 
-            top_keywords = sorted(
-                keywords_data, key=lambda x: x.get("search_volume", 0), reverse=True
-            )[:20]
+        top_keywords = sorted(
+            keywords_data, key=lambda x: x.get("search_volume", 0), reverse=True
+        )[:20]
 
-            keyword_context = self._prepare_dataforseo_keyword_context(top_keywords)
+        keyword_context = self._prepare_dataforseo_keyword_context(top_keywords)
 
-            prompt = f"""
-            You are an expert PPC campaign strategist. Your task is to create comprehensive advertising campaigns based on the provided DataForSEO keyword research for the topic: "{topic}".
+        prompt = f"""
+        You are an expert PPC campaign strategist. Your task is to create comprehensive advertising campaigns based on the provided DataForSEO keyword research for the topic: "{topic}".
 
-            **Keyword Data from DataForSEO:**
-            {keyword_context}
+        **Keyword Data from DataForSEO:**
+        {keyword_context}
 
-            **Instructions:**
-            1. Analyze the keyword data, paying close attention to search volume, CPC, competition, and keyword intent.
-            2. Create 3-4 distinct campaign strategies based on patterns you identify (e.g., high-volume informational keywords, low-competition commercial keywords).
-            3. For each campaign, provide all the requested details in the specified JSON structure.
+        **Instructions:**
+        1. Analyze the keyword data, paying close attention to search volume, CPC, competition, and keyword intent.
+        2. Create 3-4 distinct campaign strategies based on patterns you identify (e.g., high-volume informational keywords, low-competition commercial keywords).
+        3. For each campaign, provide all the requested details in the specified JSON structure.
 
-            **Output Format:**
-            Return your response as a single, valid JSON array of campaign objects. Do NOT include any explanatory text, markdown formatting (like ```json), or anything outside of the JSON array itself.
+        **Output Format:**
+        Return your response as a single, valid JSON array of campaign objects. Do NOT include any explanatory text, markdown formatting (like ```json), or anything outside of the JSON array itself.
 
-            The JSON structure for each campaign object must be:
-            {{
-                "title": "string (A compelling and specific campaign name)",
-                "objective": "string (The primary goal, e.g., 'Lead Generation', 'Brand Awareness')",
-                "keywords": ["string", "string", ...],
-                "description": "string (A detailed description of the campaign strategy and rationale)",
-                "expected_performance": "string (Performance expectations based on the data, e.g., 'High click volume with moderate CPC')",
-                "ad_copies": ["string (Headline 1)", "string (Headline 2)", "string (Description 1)"],
-                "targeting_suggestions": "string (Recommendations for targeting, bidding, and budget)"
-            }}
-            """
+        The JSON structure for each campaign object must be:
+        {{
+            "title": "string (A compelling and specific campaign name)",
+            "objective": "string (The primary goal, e.g., 'Lead Generation', 'Brand Awareness')",
+            "keywords": ["string", "string", ...],
+            "description": "string (A detailed description of the campaign strategy and rationale)",
+            "expected_performance": "string (Performance expectations based on the data, e.g., 'High click volume with moderate CPC')",
+            "ad_copies": ["string (Headline 1)", "string (Headline 2)", "string (Description 1)"],
+            "targeting_suggestions": "string (Recommendations for targeting, bidding, and budget)"
+        }}
+        """
 
-            model = genai.GenerativeModel(self.model_name)
-            campaigns = []
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    response = await model.generate_content_async(
-                        prompt,
-                        generation_config=genai.types.GenerationConfig(
-                            response_mime_type="application/json",
-                            temperature=0.7,
-                            max_output_tokens=4096,
-                        ),
-                    )
-                    campaigns = self._parse_campaign_response(response.text)
-                    if campaigns:
-                        break
-                except Exception as api_error:
-                    print(f"Gemini API attempt {attempt + 1} failed: {api_error}")
-                    if attempt == max_retries - 1:
-
-                        return self._fallback_campaign_generation_from_keywords(
-                            keywords_data, topic
-                        )
-                    await asyncio.sleep(5 * (attempt + 1))
-
-            return campaigns or self._fallback_campaign_generation_from_keywords(
-                keywords_data, topic
-            )
-
-        except Exception as e:
-            print(f"Error generating campaigns with Gemini: {e}")
-            return self._fallback_campaign_generation_from_keywords(
-                keywords_data, topic
-            )
+        model = genai.GenerativeModel(self.model_name)
+        response = await model.generate_content_async(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+                temperature=0.7,
+                max_output_tokens=4096,
+            ),
+        )
+        return self._parse_campaign_response(response.text)
 
     async def generate_hypothetical_campaigns(self, topic: str) -> List[Dict[str, Any]]:
         """Generate hypothetical campaign ideas when no keyword data is available."""
         if not self.is_available():
-            return self._fallback_campaign_generation_from_keywords([], topic)
+            return []
 
-        try:
-            await self._wait_for_rate_limit()
+        await self._wait_for_rate_limit()
 
-            prompt = f"""
-            You are an expert PPC campaign strategist. A user has provided the topic "{topic}", but no specific keyword data is available.
-
-            **Your Task:**
-            Brainstorm and create 2-3 distinct, hypothetical starter campaign strategies for this topic. Since there's no data, base your strategies on common sense, industry knowledge, and likely user intents (e.g., informational, commercial, local).
-
-            **For each campaign, provide:**
-            1. A compelling title.
-            2. A primary objective.
-            3. A list of 5-8 *example* keywords you would expect to be relevant for this campaign.
-            4. A clear description of the strategy.
-            5. General expectations for performance.
-            6. Example ad copy (headlines and descriptions).
-            7. General targeting suggestions.
-
-            **Output Format:**
-            Return your response as a single, valid JSON array of campaign objects. Do NOT include any text or markdown outside of the JSON array.
-
-            The JSON structure for each campaign object must be:
-            {{
-                "title": "string",
-                "objective": "string",
-                "keywords": ["string", "string", ...],
-                "description": "string",
-                "expected_performance": "string",
-                "ad_copies": ["string", "string", "string"],
-                "targeting_suggestions": "string"
-            }}
-            """
-            model = genai.GenerativeModel(self.model_name)
-            response = await model.generate_content_async(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    response_mime_type="application/json",
-                    temperature=0.8,
-                    max_output_tokens=4096,
-                ),
-            )
-            return self._parse_campaign_response(response.text)
-        except Exception as e:
-            print(f"Error generating hypothetical campaigns: {e}")
-            return self._fallback_campaign_generation_from_keywords([], topic)
+        prompt = PROMPT.format(topic=topic)
+        model = genai.GenerativeModel(self.model_name)
+        response = await model.generate_content_async(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+                temperature=0.8,
+                max_output_tokens=4096,
+            ),
+        )
+        return self._parse_campaign_response(response.text)
 
     def _prepare_dataforseo_keyword_context(
         self, keywords: List[Dict[str, Any]]
@@ -212,77 +183,3 @@ class LLMGenerator:
             except Exception as parse_error:
                 print(f"Fallback JSON parsing failed: {parse_error}")
                 return []
-
-    def _fallback_campaign_generation_from_keywords(
-        self, keywords_data: List[Dict[str, Any]], topic: str
-    ) -> List[Dict[str, Any]]:
-        """Fallback campaign generation when Gemini is not available or fails."""
-        if not keywords_data:
-            return [
-                {
-                    "title": f"General Campaign for {topic.title()}",
-                    "objective": "Establish a baseline presence for the topic.",
-                    "keywords": [
-                        f"{topic}",
-                        f"best {topic}",
-                        f"{topic} services",
-                        f"local {topic}",
-                        f"{topic} reviews",
-                    ],
-                    "description": "This is a starter campaign targeting the main topic directly. It aims to capture a broad audience interested in this subject.",
-                    "expected_performance": "Performance will vary. Monitor click-through rates and conversion data to refine keywords and ad copy.",
-                    "ad_copies": [
-                        f"Expert {topic.title()} Solutions",
-                        f"Top-Rated {topic.title()} Services",
-                        f"Get a Free Quote for {topic.title()} Today",
-                    ],
-                    "targeting_suggestions": "Start with broad targeting and narrow down based on performance data. Focus on relevant user demographics and interests.",
-                }
-            ]
-
-        low_comp = [
-            kw
-            for kw in keywords_data
-            if kw.get("competition_level", "").upper() == "LOW"
-        ][:5]
-        high_volume = sorted(
-            keywords_data, key=lambda x: x.get("search_volume", 0), reverse=True
-        )[:5]
-
-        campaigns = []
-
-        if low_comp:
-            campaigns.append(
-                {
-                    "title": f"Low-Competition Opportunities for {topic.title()}",
-                    "objective": "Capture market share with low-competition keywords",
-                    "keywords": [kw["keyword"] for kw in low_comp],
-                    "description": f"This campaign targets low-competition keywords to achieve a lower cost-per-acquisition. Average CPC is estimated at ${sum(kw.get('cpc', 0) for kw in low_comp) / len(low_comp):.2f}.",
-                    "expected_performance": "Lower cost acquisition with good conversion potential. Ideal for budget-conscious strategies.",
-                    "ad_copies": [
-                        f"Expert {topic.title()} Solutions",
-                        f"Affordable {topic.title()} Services",
-                        f"Get a Free Quote for {topic.title()} Today",
-                    ],
-                    "targeting_suggestions": "Broad targeting with a focus on relevant user demographics and interests. Use manual CPC to control costs.",
-                }
-            )
-
-        if high_volume:
-            campaigns.append(
-                {
-                    "title": f"High-Volume Reach for {topic.title()}",
-                    "objective": "Maximize brand visibility and reach with high-volume keywords",
-                    "keywords": [kw["keyword"] for kw in high_volume],
-                    "description": f"Focus on the most popular keywords to drive maximum traffic and brand awareness. Total search volume for this group is over {sum(kw.get('search_volume', 0) for kw in high_volume):,}.",
-                    "expected_performance": "High impression and click volume. CPC may be higher due to competition.",
-                    "ad_copies": [
-                        f"#1 {topic.title()} Provider",
-                        f"Top-Rated {topic.title()} Services",
-                        f"Your Search For {topic.title()} Ends Here.",
-                    ],
-                    "targeting_suggestions": "Use a 'Maximize Clicks' or 'Target Impression Share' bidding strategy. Monitor keyword quality scores closely.",
-                }
-            )
-
-        return campaigns[:3]
