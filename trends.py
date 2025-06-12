@@ -2,8 +2,8 @@ import asyncio
 import json
 from typing import Dict, List, Optional
 
-import google.generativeai as genai
 import requests
+from google import genai
 
 from config import Config
 
@@ -41,11 +41,12 @@ class TrendsAnalyzer:
         self.searchapi_key = config.SEARCHAPI_KEY
         self.gemini_key = config.GEMINI_API_KEY
         self.gemini_model = config.GEMINI_MODEL
+        self.client = None
         self.categories_to_track = [
             "autos_and_vehicles",
             "beauty_and_fashion",
             "entertainment",
-            # "games",
+            "games",
             "health",
             "shopping",
             "technology",
@@ -53,7 +54,7 @@ class TrendsAnalyzer:
             "pets_and_animals",
         ]
         if self.gemini_key:
-            genai.configure(api_key=self.gemini_key)
+            self.client = genai.Client(api_key=self.gemini_key)
 
     def _fetch_trending_searches(self, geo: str = "US") -> Optional[Dict]:
         """Fetches trending searches from SearchAPI."""
@@ -115,12 +116,12 @@ class TrendsAnalyzer:
             print("Error: PROMPT_TEMPLATE is None")
             return ""
 
-        return PROMPT_TEMPLATE.format(trends_summary=trends_summary)
+        return PROMPT_TEMPLATE.format(trends_summary=trends_summary or "No trends data available")
 
     async def get_promising_topics(self) -> Optional[List[str]]:
         """Orchestrates fetching, categorizing, and analyzing trends to get a list of topics."""
-        if not self.gemini_key:
-            print("Gemini API key is not configured.")
+        if not self.client:
+            print("Gemini client is not configured.")
             return None
 
         trends_data = self._fetch_trending_searches()
@@ -132,10 +133,10 @@ class TrendsAnalyzer:
         response_text = ""
 
         try:
-            model = genai.GenerativeModel(self.gemini_model)
-            response = await model.generate_content_async(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
+            response = await self.client.aio.models.generate_content(
+                model=self.gemini_model,
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
                     response_mime_type="application/json"
                 ),
             )
@@ -149,7 +150,7 @@ class TrendsAnalyzer:
 
             data = json.loads(text)
             if isinstance(data, list) and all(isinstance(item, str) for item in data):
-                return data[:7]
+                return [topic.lower() for topic in data[:7]]
             else:
                 print(f"Gemini returned data in an unexpected format: {data}")
                 return None
@@ -187,7 +188,7 @@ async def main():
     for cat, trends in categorized.items():
         print(f"  - {cat}: {len(trends)} trends found.")
 
-    print("\n🤖 Asking Gemini for the most promising topics...")
+    print("\nAsking Gemini for the most promising topics...")
     topics = await analyzer.get_promising_topics()
 
     if topics:

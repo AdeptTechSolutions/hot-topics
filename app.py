@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -76,6 +77,9 @@ st.markdown(
     font-size: 0.875rem;
     border: 1px solid #ced4da;
 }
+.stExpander .stImage > img {
+    border-radius: 15px;
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -142,7 +146,7 @@ class KeywordsCampaignsApp:
                 keywords_data
             )
 
-            progress_bar.progress(75, text="🚀 Generating AI campaign ideas...")
+            progress_bar.progress(75, text="🚀 Generating AI campaigns & images...")
             campaigns = await self.llm_generator.generate_campaigns_from_keywords(
                 keywords_data, topic
             )
@@ -199,6 +203,8 @@ class KeywordsCampaignsApp:
             📊 Shows real search metrics & competition
 
             🚀 Generates AI-powered campaign ideas
+            
+            🎨 Creates AI-generated ad images
 
             📈 Provides detailed keyword analysis
             
@@ -358,6 +364,21 @@ class KeywordsCampaignsApp:
                 f"**[Campaign Idea {i+1}] {campaign.get('title', 'Untitled')}**",
                 expanded=i == 0,
             ):
+                image_path = campaign.get("image_path")
+                if image_path and os.path.exists(image_path):
+                    cols = st.columns([1, 2, 1])
+                    with cols[1]:
+                        st.image(
+                            image_path,
+                            caption=f"Ad creative for '{campaign.get('title')}'",
+                            use_container_width=True,
+                        )
+                elif "image_prompt" in campaign:
+                    st.info(
+                        "🖼️ Image creative could not be generated for this campaign.",
+                        icon="⚠️",
+                    )
+
                 st.markdown(f"**🎯 Objective:** {campaign.get('objective', 'N/A')}")
                 st.markdown(f"**📝 Strategy:** {campaign.get('description', 'N/A')}")
                 st.markdown(
@@ -543,10 +564,11 @@ class KeywordsCampaignsApp:
         """Main application runner"""
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.image(
-                "resources/logo.png",
-                use_container_width=True,
-            )
+            if os.path.exists("resources/logo.png"):
+                st.image(
+                    "resources/logo.png",
+                    use_container_width=True,
+                )
         self.render_sidebar()
         inputs = self.render_main_settings()
 
@@ -587,7 +609,7 @@ class KeywordsCampaignsApp:
                 if "results" in st.session_state:
                     del st.session_state["results"]
                 if "suggested_topics" in st.session_state:
-                    del st.session_state["suggested_topics"]
+                    del st.session_state["suggested__topics"]
 
                 st.session_state["fetch_trending_topics"] = True
                 st.rerun()

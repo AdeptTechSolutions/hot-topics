@@ -14,7 +14,10 @@ class Config:
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-preview-05-20")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest")
+    GEMINI_IMAGE_MODEL = os.getenv(
+        "GEMINI_IMAGE_MODEL", "gemini-2.0-flash-preview-image-generation"
+    )
 
     DATAFORSEO_LOGIN = os.getenv("DATAFORSEO_LOGIN")
     DATAFORSEO_PASSWORD = os.getenv("DATAFORSEO_PASSWORD")
