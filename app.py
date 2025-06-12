@@ -123,8 +123,25 @@ class KeywordsCampaignsApp:
         progress_bar = st.progress(0, text="Initializing...")
 
         try:
-            progress_bar.progress(20, text="🔍 Fetching related keywords...")
-            api_response = self.dataforseo.get_related_keywords(topic)
+            keywords_data = []
+            api_response = None
+            max_retries = 3
+            retry_delay = 4
+
+            for attempt in range(max_retries):
+                progress_text = f"🔍 Fetching related keywords..."
+                progress_bar.progress(20 + (attempt * 10), text=progress_text)
+
+                api_response = self.dataforseo.get_related_keywords(topic)
+                print(api_response)
+                if api_response:
+                    keywords_data = self.dataforseo.extract_keyword_data(api_response)
+                    if keywords_data:
+                        break
+
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+
             if not api_response:
                 st.error(
                     "Failed to fetch keywords. The API might be down or the request timed out."
@@ -132,15 +149,14 @@ class KeywordsCampaignsApp:
                 progress_bar.empty()
                 return results
 
-            progress_bar.progress(50, text="📊 Processing keyword data...")
-            keywords_data = self.dataforseo.extract_keyword_data(api_response)
             if not keywords_data:
                 st.warning(
-                    "DataForSEO did not return any related keywords for this topic. Try a different or broader topic."
+                    "DataForSEO did not return any related keywords for this topic after several attempts. Try a different or broader topic."
                 )
                 progress_bar.empty()
                 return results
 
+            progress_bar.progress(50, text="📊 Processing keyword data...")
             results["keywords"] = keywords_data
             results["analysis"] = self.dataforseo.get_keyword_analysis_data(
                 keywords_data

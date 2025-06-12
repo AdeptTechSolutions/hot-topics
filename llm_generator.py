@@ -7,33 +7,32 @@ from typing import Any, Dict, List, Optional
 import google.generativeai as genai
 
 from config import Config
+from image_gen import ImageGenerator
 
 PROMPT = """
-You are an expert PPC campaign strategist. A user has provided the topic "{topic}", but no specific keyword data is available.
+You are an expert PPC campaign strategist. Your task is to create comprehensive advertising campaigns based on the provided keyword research for the topic: "{topic}".
 
-**Your Task:**
-Brainstorm and create 2-3 distinct, hypothetical starter campaign strategies for this topic. Since there's no data, base your strategies on common sense, industry knowledge, and likely user intents (e.g., informational, commercial, local).
+**Keyword Data:**
+{keyword_context}
 
-**For each campaign, provide:**
-1. A compelling title.
-2. A primary objective.
-3. A list of 5-8 *example* keywords you would expect to be relevant for this campaign.
-4. A clear description of the strategy.
-5. General expectations for performance.
-6. One detailed example ad copy, including multiple headlines and descriptions, structured as a JSON object.
-7. General targeting suggestions.
-8. **Crucially, ensure the entire output is a single, valid JSON array. All string values within the JSON must be properly escaped, especially for multi-line content like descriptions.**
+**Instructions:**
+1. Analyze the keyword data, paying close attention to search volume, CPC, competition, and keyword intent.
+2. Create 3-4 distinct campaign strategies based on patterns you identify (e.g., high-volume informational keywords, low-competition commercial keywords).
+3. For each campaign, provide all the requested details in the specified JSON structure.
+4. For the `ad_copies`, create one complete, detailed ad copy structured as a JSON object. It should follow modern digital advertising standards.
+5. For the `image_prompt`, create a detailed, descriptive prompt for a text-to-image model to generate a relevant ad creative. Follow prompt writing best practices: include a clear subject, context/background, and style (e.g., 'photorealistic', 'vibrant illustration', 'minimalist'). For example: "A photorealistic, close-up shot of a high-quality, durable car tyre on a wet asphalt road, with water splashing dynamically. The lighting should be dramatic to highlight the tread pattern and grip."
+6. **Crucially, ensure the entire output is a single, valid JSON array. All string values within the JSON must be properly escaped, especially for multi-line content like descriptions.**
 
 **Output Format:**
-Return your response as a single, valid JSON array of campaign objects. Do NOT include any text or markdown outside of the JSON array.
+Return your response as a single, valid JSON array of campaign objects. Do NOT include any explanatory text, markdown formatting (like ```json), or anything outside of the JSON array itself.
 
 The JSON structure for each campaign object must be:
 {{
-    "title": "string",
-    "objective": "string",
+    "title": "string (A compelling and specific campaign name)",
+    "objective": "string (The primary goal, e.g., 'Lead Generation', 'Brand Awareness')",
     "keywords": ["string", "string", ...],
-    "description": "string",
-    "expected_performance": "string",
+    "description": "string (A detailed description of the campaign strategy and rationale)",
+    "expected_performance": "string (Performance expectations based on the data, e.g., 'High click volume with moderate CPC')",
     "ad_copies": [
         {{
             "headlines": [
@@ -45,16 +44,17 @@ The JSON structure for each campaign object must be:
                 "string (Description 1, max 90 chars)",
                 "string (Description 2, max 90 chars)"
             ],
-            "display_path": "string (e.g., /Best-Deals)"
+            "display_path": "string (e.g., /tyre-deals)"
         }}
     ],
-    "targeting_suggestions": "string"
+    "targeting_suggestions": "string (Recommendations for targeting, bidding, and budget)",
+    "image_prompt": "string (A detailed prompt for an image generation model.)"
 }}
 """
 
 
 class LLMGenerator:
-    """AI-powered campaign generator using Gemini for DataForSEO keyword data"""
+    """AI-powered campaign generator using Gemini for keyword data"""
 
     def __init__(self, config: Config):
         self.api_key = config.GEMINI_API_KEY
@@ -62,6 +62,7 @@ class LLMGenerator:
         self.client = None
         self.last_request_time = 0
         self.request_delay = 2.0
+        self.image_generator = ImageGenerator(config)
 
         if self.api_key:
             try:
@@ -71,7 +72,7 @@ class LLMGenerator:
                 print(f"Error initializing Gemini client: {e}")
 
     def is_available(self) -> bool:
-        """Check if Gemini API is available"""
+        """Check if Gemini API is available for text generation"""
         return self.client is not None and self.api_key is not None
 
     async def _wait_for_rate_limit(self):
@@ -82,10 +83,35 @@ class LLMGenerator:
             await asyncio.sleep(self.request_delay - elapsed)
         self.last_request_time = time.time()
 
+    async def _generate_and_attach_images(
+        self, campaigns: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Takes a list of campaigns, generates an image for each, and attaches the path.
+        """
+        if not self.image_generator.is_available():
+            print("Image generator not available, skipping image generation.")
+            return campaigns
+
+        async def process_campaign(campaign: Dict[str, Any]) -> Dict[str, Any]:
+            image_prompt = campaign.get("image_prompt")
+            title = campaign.get("title", "untitled-campaign")
+            if image_prompt:
+                await asyncio.sleep(1)
+                image_path = await self.image_generator.generate_image(
+                    image_prompt, title
+                )
+                campaign["image_path"] = image_path
+            return campaign
+
+        tasks = [process_campaign(c) for c in campaigns]
+        processed_campaigns = await asyncio.gather(*tasks)
+        return processed_campaigns
+
     async def generate_campaigns_from_keywords(
         self, keywords_data: List[Dict[str, Any]], topic: str
     ) -> List[Dict[str, Any]]:
-        """Generate campaign ideas based on DataForSEO keyword data"""
+        """Generate campaign ideas based on keyword data"""
         if not self.is_available():
             return []
 
@@ -95,48 +121,9 @@ class LLMGenerator:
             keywords_data, key=lambda x: x.get("search_volume", 0), reverse=True
         )[:20]
 
-        keyword_context = self._prepare_dataforseo_keyword_context(top_keywords)
+        keyword_context = self._prepare_keyword_context(top_keywords)
 
-        prompt = f"""
-        You are an expert PPC campaign strategist. Your task is to create comprehensive advertising campaigns based on the provided DataForSEO keyword research for the topic: "{topic}".
-
-        **Keyword Data from DataForSEO:**
-        {keyword_context}
-
-        **Instructions:**
-        1. Analyze the keyword data, paying close attention to search volume, CPC, competition, and keyword intent.
-        2. Create 3-4 distinct campaign strategies based on patterns you identify (e.g., high-volume informational keywords, low-competition commercial keywords).
-        3. For each campaign, provide all the requested details in the specified JSON structure.
-        4. For the `ad_copies`, create one complete, detailed ad copy structured as a JSON object. It should follow modern digital advertising standards.
-        5. **Crucially, ensure the entire output is a single, valid JSON array. All string values within the JSON must be properly escaped, especially for multi-line content like descriptions.**
-
-        **Output Format:**
-        Return your response as a single, valid JSON array of campaign objects. Do NOT include any explanatory text, markdown formatting (like ```json), or anything outside of the JSON array itself.
-
-        The JSON structure for each campaign object must be:
-        {{
-            "title": "string (A compelling and specific campaign name)",
-            "objective": "string (The primary goal, e.g., 'Lead Generation', 'Brand Awareness')",
-            "keywords": ["string", "string", ...],
-            "description": "string (A detailed description of the campaign strategy and rationale)",
-            "expected_performance": "string (Performance expectations based on the data, e.g., 'High click volume with moderate CPC')",
-            "ad_copies": [
-                {{
-                    "headlines": [
-                        "string (Headline 1, max 30 chars)",
-                        "string (Headline 2, max 30 chars)",
-                        "string (Headline 3, max 30 chars)"
-                    ],
-                    "descriptions": [
-                        "string (Description 1, max 90 chars)",
-                        "string (Description 2, max 90 chars)"
-                    ],
-                    "display_path": "string (e.g., /Tyre-Deals)"
-                }}
-            ],
-            "targeting_suggestions": "string (Recommendations for targeting, bidding, and budget)"
-        }}
-        """
+        prompt = PROMPT.format(topic=topic, keyword_context=keyword_context)
 
         model = genai.GenerativeModel(self.model_name)
         response = await model.generate_content_async(
@@ -144,42 +131,29 @@ class LLMGenerator:
             generation_config=genai.types.GenerationConfig(
                 response_mime_type="application/json",
                 temperature=0.2,
-                max_output_tokens=4096,
+                max_output_tokens=8192,
             ),
         )
-        return self._parse_campaign_response(response.text)
-
-    async def generate_hypothetical_campaigns(self, topic: str) -> List[Dict[str, Any]]:
-        """Generate hypothetical campaign ideas when no keyword data is available."""
-        if not self.is_available():
+        campaigns = self._parse_campaign_response(response.text)
+        if not campaigns:
             return []
 
-        await self._wait_for_rate_limit()
+        return await self._generate_and_attach_images(campaigns)
 
-        prompt = PROMPT.format(topic=topic)
-        model = genai.GenerativeModel(self.model_name)
-        response = await model.generate_content_async(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                response_mime_type="application/json",
-                temperature=0.8,
-                max_output_tokens=4096,
-            ),
-        )
-        return self._parse_campaign_response(response.text)
-
-    def _prepare_dataforseo_keyword_context(
-        self, keywords: List[Dict[str, Any]]
-    ) -> str:
-        """Prepare DataForSEO keyword data context for prompts"""
+    def _prepare_keyword_context(self, keywords: List[Dict[str, Any]]) -> str:
+        """Prepare keyword data context for prompts"""
         context_lines = []
         for kw in keywords:
+            search_volume = kw.get("search_volume") or 0
+            cpc = kw.get("cpc") or 0.0
+            difficulty = kw.get("keyword_difficulty") or 0
+
             line = (
                 f"Keyword: {kw.get('keyword', '')} | "
-                f"Volume: {kw.get('search_volume', 0):,} | "
-                f"CPC: ${kw.get('cpc', 0):.2f} | "
+                f"Volume: {search_volume:,} | "
+                f"CPC: ${cpc:.2f} | "
                 f"Competition: {kw.get('competition_level', 'N/A')} | "
-                f"Difficulty: {kw.get('keyword_difficulty', 0)}/100"
+                f"Difficulty: {difficulty}/100"
             )
             context_lines.append(line)
         return "\n".join(context_lines)
