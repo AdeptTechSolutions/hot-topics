@@ -358,13 +358,13 @@ class KeywordsCampaignsApp:
                 f"**[Campaign Idea {i+1}] {campaign.get('title', 'Untitled')}**",
                 expanded=i == 0,
             ):
-                st.markdown(f"**🎯 Objective** {campaign.get('objective', 'N/A')}")
-                st.markdown(f"**📝 Strategy** {campaign.get('description', 'N/A')}")
+                st.markdown(f"**🎯 Objective:** {campaign.get('objective', 'N/A')}")
+                st.markdown(f"**📝 Strategy:** {campaign.get('description', 'N/A')}")
                 st.markdown(
-                    f"**💡 Targeting & Bidding** {campaign.get('targeting_suggestions', 'N/A')}"
+                    f"**💡 Targeting & Bidding:** {campaign.get('targeting_suggestions', 'N/A')}"
                 )
                 st.markdown(
-                    f"**📈 Expected Performance** *{campaign.get('expected_performance', 'N/A')}*"
+                    f"**📈 Expected Performance:** *{campaign.get('expected_performance', 'N/A')}*"
                 )
 
                 col1, col2 = st.columns(2)
