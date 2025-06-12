@@ -580,29 +580,47 @@ class KeywordsCampaignsApp:
         with col2:
             search_api_available = bool(self.config.SEARCHAPI_KEY)
             if st.button(
-                "📈 Search Trends",
+                "💡 Search Trends",
                 use_container_width=True,
                 disabled=not search_api_available,
             ):
                 if "results" in st.session_state:
                     del st.session_state["results"]
+                if "suggested_topics" in st.session_state:
+                    del st.session_state["suggested_topics"]
 
-                with st.spinner("Analyzing Google Trends to find a hot topic..."):
-                    suggested_topic = asyncio.run(
-                        self.trends_analyzer.get_most_promising_topic()
-                    )
+                st.session_state["fetch_trending_topics"] = True
+                st.rerun()
 
-                if suggested_topic:
-                    st.session_state["topic"] = suggested_topic
-                    st.session_state["auto_run_analysis"] = True
-                    st.success(
-                        f"🔥 Suggested topic: **{suggested_topic}**. Starting analysis..."
-                    )
-                    st.rerun()
-                else:
-                    st.error(
-                        "Could not fetch or analyze trending topics. Please try again later."
-                    )
+            if (
+                "suggested_topics" in st.session_state
+                and st.session_state["suggested_topics"]
+            ):
+                topics = st.session_state["suggested_topics"]
+                col1, col2, col3 = st.columns([1, 1.75, 1])
+                with col2:
+                    popover = st.popover("🔥 View Trending", use_container_width=True)
+                with popover:
+                    for i, topic in enumerate(topics):
+                        if st.button(topic, key=f"trend_{i}", use_container_width=True):
+                            st.session_state["topic"] = topic
+                            st.session_state["auto_run_analysis"] = True
+                            del st.session_state["suggested_topics"]
+                            st.rerun()
+
+        if st.session_state.get("fetch_trending_topics"):
+            st.session_state["fetch_trending_topics"] = False
+            with st.spinner("Analyzing Google Trends to find hot topics..."):
+                suggested_topics = asyncio.run(
+                    self.trends_analyzer.get_promising_topics()
+                )
+            if suggested_topics:
+                st.session_state["suggested_topics"] = suggested_topics
+            else:
+                st.error(
+                    "Could not fetch or analyze trending topics. Please try again later."
+                )
+            st.rerun()
 
         if st.session_state.get("auto_run_analysis") and st.session_state.get("topic"):
             st.session_state.pop("auto_run_analysis", None)
@@ -625,7 +643,7 @@ class KeywordsCampaignsApp:
                 self.render_results(st.session_state["results"])
         elif "topic" not in st.session_state or not st.session_state["topic"]:
             st.info(
-                "👆 Please enter a topic above and click 'Analyze', or click 'Search Trends' for an AI-suggested topic."
+                "👆 Please enter a topic above and click 'Analyze', or click 'Search Trends' for AI-suggested topics."
             )
 
 

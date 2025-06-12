@@ -10,25 +10,26 @@ from config import Config
 PROMPT_TEMPLATE = """
 You are a senior marketing strategist specializing in identifying high-potential advertising opportunities from market trends.
 
-Your task is to analyze the following list of categorized trending search queries from Google Trends and select the single best topic for a new, broad-based advertising campaign.
+Your task is to analyze the following list of categorized trending search queries from Google Trends and select the SEVEN most promising and distinct topics for new, broad-based advertising campaigns.
 
 **Trending Search Queries:**
 {trends_summary}
 
 **Your Goal:**
-Identify one single topic from the queries that has the highest potential for a successful advertising campaign. Consider factors like:
+Identify seven distinct topics from the queries that have high potential for a successful advertising campaign. Prioritize topics with commercial intent. Consider factors like:
 - Commercial intent (Is it something people buy or research before buying?).
 - Broad appeal (Can it target a large audience?).
 - Timeliness and trendiness.
 - Competitiveness (A very high-level news event might be too crowded).
+- Variety (Choose topics from different categories if possible).
 
 **Instructions:**
 1. Review all the trends provided.
-2. Choose the single most promising topic for an ad campaign.
-3. Your response MUST be only the chosen topic string. Do not add any explanation, preamble, or any other text. Just the topic.
+2. Choose the seven most promising topics for ad campaigns.
+3. Your response MUST be a single, valid JSON array containing exactly 7 topic strings. Do not add any explanation, preamble, markdown, or any other text. Just the JSON array.
 
-Example: If you choose 'electric car chargers', your entire response should be:
-electric car chargers
+**Example of a valid response:**
+["electric car chargers", "summer travel deals", "new smartphone release", "air fryer recipes", "local concert tickets", "skincare trends", "pet adoption near me"]
 """
 
 
@@ -88,9 +89,9 @@ class TrendsAnalyzer:
             trend_categories = trend.get("categories", [])
             for cat in trend_categories:
                 if cat in self.categories_to_track and len(categorized[cat]) < 10:
-                    categorized[cat].append(
-                        {"query": trend.get("query"), "position": trend.get("position")}
-                    )
+                    query = trend.get("query") or "Unknown Query"
+                    position = trend.get("position") or "N/A"
+                    categorized[cat].append({"query": query, "position": position})
         return categorized
 
     def _prepare_gemini_prompt(self, categorized_trends: Dict) -> str:
@@ -100,18 +101,24 @@ class TrendsAnalyzer:
             summary_parts.append(f"Category: {category}")
             if trends:
                 for trend in trends:
-                    summary_parts.append(
-                        f"- {trend['query']} (Overall Position: {trend['position']})"
-                    )
+                    query = trend.get("query", "N/A")
+                    position = trend.get("position", "N/A")
+                    summary_parts.append(f"- {query} (Overall Position: {position})")
             else:
                 summary_parts.append("NULL")
             summary_parts.append("")
 
         trends_summary = "\n".join(summary_parts)
+
+        # Check if PROMPT_TEMPLATE is None and handle gracefully
+        if PROMPT_TEMPLATE is None:
+            print("Error: PROMPT_TEMPLATE is None")
+            return ""
+
         return PROMPT_TEMPLATE.format(trends_summary=trends_summary)
 
-    async def get_most_promising_topic(self) -> Optional[str]:
-        """Orchestrates fetching, categorizing, and analyzing trends to get a topic."""
+    async def get_promising_topics(self) -> Optional[List[str]]:
+        """Orchestrates fetching, categorizing, and analyzing trends to get a list of topics."""
         if not self.gemini_key:
             print("Gemini API key is not configured.")
             return None
@@ -121,15 +128,35 @@ class TrendsAnalyzer:
             return None
 
         categorized_trends = self._categorize_trends(trends_data)
-
         prompt = self._prepare_gemini_prompt(categorized_trends)
+        response_text = ""
 
         try:
             model = genai.GenerativeModel(self.gemini_model)
-            response = await model.generate_content_async(prompt)
-            return response.text.strip()
-        except Exception as e:
-            print(f"Gemini API call failed: {e}")
+            response = await model.generate_content_async(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    response_mime_type="application/json"
+                ),
+            )
+            response_text = response.text
+
+            text = response_text.strip()
+            if text.startswith("```json"):
+                text = text[7:].strip()
+            if text.endswith("```"):
+                text = text[:-3].strip()
+
+            data = json.loads(text)
+            if isinstance(data, list) and all(isinstance(item, str) for item in data):
+                return data[:7]
+            else:
+                print(f"Gemini returned data in an unexpected format: {data}")
+                return None
+
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"Gemini API call or JSON parsing failed: {e}")
+            print(f"Raw response from Gemini: {response_text}")
             return None
 
 
@@ -160,13 +187,15 @@ async def main():
     for cat, trends in categorized.items():
         print(f"  - {cat}: {len(trends)} trends found.")
 
-    print("\n🤖 Asking Gemini for the most promising topic...")
-    topic = await analyzer.get_most_promising_topic()
+    print("\n🤖 Asking Gemini for the most promising topics...")
+    topics = await analyzer.get_promising_topics()
 
-    if topic:
-        print(f"\nGemini suggested topic: '{topic}'")
+    if topics:
+        print(f"\nGemini suggested {len(topics)} topics:")
+        for i, topic in enumerate(topics):
+            print(f"  {i+1}. {topic}")
     else:
-        print("Gemini failed to suggest a topic.")
+        print("Gemini failed to suggest any topics.")
 
 
 if __name__ == "__main__":
