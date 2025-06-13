@@ -625,7 +625,7 @@ class KeywordsCampaignsApp:
                 if "results" in st.session_state:
                     del st.session_state["results"]
                 if "suggested_topics" in st.session_state:
-                    del st.session_state["suggested__topics"]
+                    del st.session_state["suggested_topics"]
 
                 st.session_state["fetch_trending_topics"] = True
                 st.rerun()
@@ -639,12 +639,32 @@ class KeywordsCampaignsApp:
                 with col2:
                     popover = st.popover("🔥 View Trending", use_container_width=True)
                 with popover:
-                    for i, topic in enumerate(topics):
-                        if st.button(topic, key=f"trend_{i}", use_container_width=True):
-                            st.session_state["topic"] = topic
-                            st.session_state["auto_run_analysis"] = True
-                            del st.session_state["suggested_topics"]
-                            st.rerun()
+                    categories = {}
+                    for topic_data in topics:
+                        if isinstance(topic_data, dict) and "category" in topic_data:
+                            category = topic_data["category"]
+                            topic = topic_data["topic"]
+                            if category not in categories:
+                                categories[category] = []
+                            categories[category].append(topic)
+                        elif isinstance(topic_data, str):
+                            if "general" not in categories:
+                                categories["general"] = []
+                            categories["general"].append(topic_data)
+
+                    for category, category_topics in categories.items():
+                        category_name = category.replace("_", " ").title()
+                        st.markdown(f":rainbow-background[**{category_name}**]")
+                        for i, topic in enumerate(category_topics):
+                            if st.button(
+                                topic,
+                                key=f"trend_{category}_{i}",
+                                use_container_width=True,
+                            ):
+                                st.session_state["topic"] = topic
+                                st.session_state["auto_run_analysis"] = True
+                                del st.session_state["suggested_topics"]
+                                st.rerun()
 
         if st.session_state.get("fetch_trending_topics"):
             st.session_state["fetch_trending_topics"] = False
