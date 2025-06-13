@@ -10,13 +10,13 @@ from config import Config
 PROMPT_TEMPLATE = """
 You are a senior marketing strategist specializing in identifying high-potential advertising opportunities from market trends.
 
-Your task is to analyze the following list of categorized trending search queries from Google Trends and select the 50 most promising and distinct topics for new, broad-based advertising campaigns.
+Your task is to analyze the following list of categorized trending search queries from Google Trends and select the 100 most promising and distinct topics for new, broad-based advertising campaigns.
 
 **Trending Search Queries:**
 {trends_summary}
 
 **Your Goal:**
-Identify 50 distinct topics from the queries that have high potential for a successful advertising campaign. Prioritize topics with commercial intent. Consider factors like:
+Identify 100 distinct topics from the queries that have high potential for a successful advertising campaign. Prioritize topics with commercial intent. Consider factors like:
 - Commercial intent (Is it something people buy or research before buying?).
 - Broad appeal (Can it target a large audience?).
 - Timeliness and trendiness.
@@ -24,11 +24,11 @@ Identify 50 distinct topics from the queries that have high potential for a succ
 - Variety (Choose topics from different categories if possible).
 
 **Distribution Strategy:**
-Try to distribute the 50 topics across available categories in a relatively even fashion. Aim for roughly 5-6 topics per category when data is available, but prioritize quality over perfect distribution. If a category has no trending data (marked as NULL), skip it entirely and focus on categories with actual trends. You may filter out topics from a category that you find irrelevant, for example, the topic "all" in "travel_and_transportation" category or "age" in "games" category.
+Try to distribute the 100 topics across available categories in a relatively even fashion. Aim for roughly 5-6 topics per category when data is available, but prioritize quality over perfect distribution. If a category has no trending data (marked as NULL), skip it entirely and focus on categories with actual trends. You may filter out topics from a category that you find irrelevant, for example, the topic "all" in "travel_and_transportation" category or "age" in "games" category.
 
 **Instructions:**
 1. Review the trends provided.
-2. Choose the 50 most promising topics for ad campaigns.
+2. Choose the 100 most promising topics for ad campaigns.
 3. Your response MUST be a single, valid JSON object with categories as keys and arrays of topic strings as values. Each category should contain relevant topics. Do not add any explanation, preamble, markdown, or any other text. Just the JSON object.
 
 **Example of a valid response:**
@@ -90,7 +90,7 @@ class TrendsAnalyzer:
             return None
 
     def _categorize_trends(self, trends_data: Dict) -> Dict[str, List[Dict]]:
-        """Categorizes trends and limits them to 50 per category."""
+        """Categorizes trends and limits them to 100 per category."""
         categorized = {cat: [] for cat in self.categories_to_track}
 
         if not trends_data or "trends" not in trends_data:
@@ -99,7 +99,7 @@ class TrendsAnalyzer:
         for trend in trends_data["trends"]:
             trend_categories = trend.get("categories", [])
             for cat in trend_categories:
-                if cat in self.categories_to_track and len(categorized[cat]) < 50:
+                if cat in self.categories_to_track and len(categorized[cat]) < 100:
                     query = trend.get("query") or "Unknown Query"
                     position = trend.get("position") or "N/A"
                     categorized[cat].append({"query": query, "position": position})
@@ -123,7 +123,7 @@ class TrendsAnalyzer:
             summary_parts.append("")
 
         if categories_with_data:
-            target_per_category = max(1, 50 // len(categories_with_data))
+            target_per_category = max(1, 100 // len(categories_with_data))
             summary_parts.append(
                 f"DISTRIBUTION GUIDANCE: You have {len(categories_with_data)} categories with data. Try to select approximately {target_per_category} topics from each category with data to achieve even distribution."
             )
@@ -180,7 +180,7 @@ class TrendsAnalyzer:
                                 topics_with_categories.append(
                                     {"topic": topic.lower(), "category": category}
                                 )
-                return topics_with_categories[:50]
+                return topics_with_categories[:100]
             else:
                 print(f"Gemini returned data in an unexpected format: {data}")
                 return None
